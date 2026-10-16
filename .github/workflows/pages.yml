@@ -1,4 +1,4 @@
-name: Build and deploy Cyrrenza MT5 admin site
+name: Build, test and deploy Cyrrenza MT5 admin site
 on:
   push:
     branches: [main]
@@ -19,13 +19,61 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Validate admin page exists
-        run: test -s index.html
-      - name: Validate basic HTML structure
+      - name: Validate admin page and required modules
         run: |
+          test -s index.html
           grep -qi '<!doctype html>' index.html
           grep -qi '<title>Cyrrenza MT5' index.html
           grep -qi '</html>' index.html
+          for module in overview markets clients trading compliance platform integrations audit; do
+            grep -q "id=\"page-$module\"" index.html
+          done
+      - name: Validate HTML and extract inline JavaScript
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class Validator(HTMLParser):
+              def __init__(self):
+                  super().__init__(convert_charrefs=True)
+                  self.scripts = []
+                  self.in_script = False
+                  self.current = []
+
+              def handle_starttag(self, tag, attrs):
+                  if tag == "script":
+                      self.in_script = True
+                      self.current = []
+                      if dict(attrs).get("src"):
+                          self.current = None
+
+              def handle_data(self, data):
+                  if self.in_script and self.current is not None:
+                      self.current.append(data)
+
+              def handle_endtag(self, tag):
+                  if tag == "script" and self.in_script:
+                      if self.current is not None:
+                          self.scripts.append("".join(self.current))
+                      self.in_script = False
+                      self.current = []
+
+          html = Path("index.html").read_text(encoding="utf-8")
+          parser = Validator()
+          parser.feed(html)
+          parser.close()
+          if not parser.scripts:
+              raise SystemExit("No inline JavaScript found to validate")
+          for i, script in enumerate(parser.scripts, 1):
+              Path(f"/tmp/cyrrenza-inline-{i}.js").write_text(script, encoding="utf-8")
+          print(f"HTML parser completed; extracted {len(parser.scripts)} inline script(s).")
+          PY
+      - name: Check JavaScript syntax
+        run: |
+          for script in /tmp/cyrrenza-inline-*.js; do
+            node --check "$script"
+          done
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
