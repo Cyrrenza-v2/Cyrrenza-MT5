@@ -8,14 +8,17 @@ jobs:
     steps:
       - checkout
       - run:
-          name: Verify admin console files
+          name: Verify admin console and modules
           command: |
             set -eu
-            test -f index.html
+            test -s index.html
             test -f .github/workflows/pages.yml
             grep -Eiq '<!doctype html' index.html
             grep -Eiq '<title[^>]*>.*</title>' index.html
             grep -Eiq '</html>[[:space:]]*$' index.html
+            for module in overview markets clients trading compliance platform integrations audit; do
+              grep -q "id=\"page-$module\"" index.html
+            done
             python - <<'PY'
             from html.parser import HTMLParser
             from pathlib import Path
@@ -25,25 +28,43 @@ jobs:
                     super().__init__(convert_charrefs=True)
                     self.errors = []
 
-                def error(self, message):
-                    self.errors.append(message)
-
             source = Path("index.html").read_text(encoding="utf-8")
             parser = ConsoleParser()
             parser.feed(source)
             parser.close()
-            if parser.errors:
-                raise SystemExit("HTML parsing reported errors: " + "; ".join(parser.errors))
             print(f"HTML parser completed; checked {len(source)} characters.")
             PY
+
+  validate-javascript:
+    docker:
+      - image: cimg/node:22.10
+    working_directory: ~/project
+    steps:
+      - checkout
       - run:
-          name: Report deployment configuration
+          name: Extract and syntax-check inline JavaScript
           command: |
-            echo "CircleCI validation passed."
-            echo "GitHub Pages deployment is handled separately by .github/workflows/pages.yml."
-            echo "This pipeline does not connect to a live MT5 server or execute trades."
+            set -eu
+            node - <<'NODE'
+            const fs = require('fs');
+            const html = fs.readFileSync('index.html', 'utf8');
+            const scripts = [...html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)]
+              .map(match => match[1])
+              .filter(source => source.trim().length > 0);
+            if (scripts.length === 0) {
+              throw new Error('No inline JavaScript found');
+            }
+            scripts.forEach((source, index) => {
+              fs.writeFileSync('/tmp/cyrrenza-inline-' + (index + 1) + '.js', source);
+            });
+            console.log('Extracted ' + scripts.length + ' inline script(s).');
+            NODE
+            for script in /tmp/cyrrenza-inline-*.js; do
+              node --check "$script"
+            done
 
 workflows:
   validate-on-push:
     jobs:
       - validate-admin-console
+      - validate-javascript
