@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - 'index.html'
+      - 'supabase-admin.js'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:
@@ -74,6 +75,7 @@ jobs:
           for script in /tmp/cyrrenza-inline-*.js; do
             node --check "$script"
           done
+          node --check supabase-admin.js
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
