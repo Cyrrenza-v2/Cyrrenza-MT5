@@ -7,7 +7,7 @@
   const prices = new Map();
   let socket = null, reconnectTimer = null, started = false;
   const safe = value => String(value ?? "").replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
-  const format = value => Number.isFinite(Number(value)) ? Number(value).toLocaleString(undefined,{maximumFractionDigits:8}) : "—";
+  const format = value => value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? "—" : Number(value).toLocaleString(undefined,{maximumFractionDigits:8});
   function setStatus(text, bad=false) {
     const node = document.getElementById("derivFeedStatus");
     if (node) { node.textContent=text; node.className="tag"; node.style.color=bad?"#ff7d8b":"#70e0bd"; }
