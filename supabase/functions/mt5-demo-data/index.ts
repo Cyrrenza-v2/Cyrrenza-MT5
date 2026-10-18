@@ -125,7 +125,13 @@ Deno.serve(async (req: Request) => {
 
     const providerTimestamp = payload?.timestamp ?? payload?.checkedAt ?? payload?.data?.timestamp ?? null;
     const parsedTimestamp = typeof providerTimestamp === "string" ? Date.parse(providerTimestamp) : NaN;
-    const stale = Number.isFinite(parsedTimestamp) && Date.now() - parsedTimestamp > 120_000;
+    if (!Number.isFinite(parsedTimestamp) || parsedTimestamp > Date.now() + 30_000) {
+      return reply({
+        status: "invalid_response", resource, environment: "demo", tradingEnabled: false,
+        reason: "Adapter must provide a valid provider timestamp no more than 30 seconds in the future.",
+      }, 503);
+    }
+    const stale = Date.now() - parsedTimestamp > 120_000;
     if (stale) {
       return reply({
         integration: "mt5_demo_adapter",
