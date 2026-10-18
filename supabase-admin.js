@@ -53,10 +53,8 @@
           gate.style.display="grid";
           say(e.status===403?"This account is not an active Cyrrenza MT5 admin. Ask the project owner to authorize the profile.":"Your session expired. Please sign in again.");
         } else {
-          gate.style.display="none";
-          say("Backend connection is temporarily unavailable. Your session is retained; use Refresh view to retry. "+(e.message||""));
-          const notice=document.querySelector("#page-overview .notice");
-          if(notice) notice.textContent="Backend connection unavailable. Data below may be incomplete; no live provider state is assumed. Use Refresh view to retry.";
+          gate.style.display="grid";
+          say("Sign-in is retained, but the secured backend is temporarily unavailable. Refresh the page to retry. "+(e.message||""));
         }
       }
     }
