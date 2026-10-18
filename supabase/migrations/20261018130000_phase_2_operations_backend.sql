@@ -29,6 +29,67 @@ create table if not exists public.order_requests (
   reconciled_at timestamptz,
   constraint order_requests_account_demo_only check (environment = 'demo')
 );
+-- Derive client identity from the broker account and reject non-demo accounts.
+create or replace function public.enforce_demo_order_account()
+returns trigger language plpgsql set search_path = '' as $
+declare
+  account_client uuid;
+  account_type text;
+begin
+  select ba.client_id, ba.account_type
+    into account_client, account_type
+  from public.broker_accounts ba
+  where ba.id = new.broker_account_id
+  for key share;
+  if account_client is null then
+    raise exception 'Broker account is missing or has no client';
+  end if;
+  if account_type <> 'demo' then
+    raise exception 'Only verified demo broker accounts may receive order requests';
+  end if;
+  if new.client_id is not null and new.client_id <> account_client then
+    raise exception 'Order client_id must match the broker account client_id';
+  end if;
+  new.client_id := account_client;
+  if tg_op = 'INSERT' and new.status <> 'pending_approval' then
+    raise exception 'New order requests must start pending approval';
+  end if;
+  return new;
+end;
+$;
+revoke all on function public.enforce_demo_order_account() from public, anon, authenticated;
+drop trigger if exists order_requests_demo_account_guard on public.order_requests;
+create trigger order_requests_demo_account_guard
+before insert or update of broker_account_id, client_id, status on public.order_requests
+for each row execute function public.enforce_demo_order_account();
+
+-- Enforce a conservative order lifecycle; uncertain provider outcomes must be
+-- reconciled and must never cause an automatic duplicate submission.
+create or replace function public.enforce_order_status_transition()
+returns trigger language plpgsql set search_path = '' as $
+begin
+  if new.status = old.status then
+    return new;
+  end if;
+  if not (
+    (old.status = 'pending_approval' and new.status in ('approved','rejected','cancelled','failed')) or
+    (old.status = 'approved' and new.status in ('submitting','cancelled','failed')) or
+    (old.status = 'submitting' and new.status in ('submitted','partially_filled','filled','failed','outcome_unknown')) or
+    (old.status = 'submitted' and new.status in ('partially_filled','filled','cancelled','failed','outcome_unknown')) or
+    (old.status = 'partially_filled' and new.status in ('partially_filled','filled','cancelled','outcome_unknown')) or
+    (old.status = 'outcome_unknown' and new.status in ('outcome_unknown','submitted','partially_filled','filled','cancelled','failed'))
+  ) then
+    raise exception 'Invalid order status transition: % -> %', old.status, new.status;
+  end if;
+  return new;
+end;
+$;
+revoke all on function public.enforce_order_status_transition() from public, anon, authenticated;
+drop trigger if exists order_requests_status_transition_guard on public.order_requests;
+create trigger order_requests_status_transition_guard
+before update of status on public.order_requests
+for each row execute function public.enforce_order_status_transition();
+
 create index if not exists order_requests_status_requested_at_idx on public.order_requests(status, requested_at desc);
 create index if not exists order_requests_account_requested_at_idx on public.order_requests(broker_account_id, requested_at desc);
 
@@ -91,7 +152,67 @@ create table if not exists public.broker_positions (
   raw_provider_data jsonb not null default '{}'::jsonb,
   unique (broker_account_id, provider_position_id)
 );
-create index if not exists broker_positions_account_symbol_idx on public.broker_positions(broker_account_id, symbol);
+-- Recursively reject credential-like keys in provider payloads. Bound payloads to
+-- 16 KiB so raw provider responses cannot become an unbounded secret/log store.
+create or replace function public.jsonb_has_sensitive_key(p_value jsonb)
+returns boolean language plpgsql immutable set search_path = '' as $
+declare
+  item record;
+begin
+  if jsonb_typeof(p_value) = 'object' then
+    for item in select key, value from jsonb_each(p_value) loop
+      if item.key ~* '(password|passwd|secret|token|authorization|api[_-]?key|credential|cookie|private[_-]?key|client[_-]?secret)' then
+        return true;
+      end if;
+      if public.jsonb_has_sensitive_key(item.value) then
+        return true;
+      end if;
+    end loop;
+  elsif jsonb_typeof(p_value) = 'array' then
+    for item in select value from jsonb_array_elements(p_value) loop
+      if public.jsonb_has_sensitive_key(item.value) then
+        return true;
+      end if;
+    end loop;
+  end if;
+  return false;
+end;
+$;
+revoke all on function public.jsonb_has_sensitive_key(jsonb) from public, anon, authenticated;
+
+create or replace function public.guard_provider_payloads()
+returns trigger language plpgsql set search_path = '' as $
+declare
+  payload jsonb;
+begin
+  payload := to_jsonb(new)->'provider_outcome';
+  if payload is not null and payload <> 'null'::jsonb then
+    if pg_column_size(payload) > 16384 then
+      raise exception 'Provider payload exceeds 16 KiB limit';
+    end if;
+    if public.jsonb_has_sensitive_key(payload) then
+      raise exception 'Provider payload contains a prohibited credential-like field';
+    end if;
+  end if;
+  payload := to_jsonb(new)->'raw_provider_data';
+  if payload is not null and payload <> 'null'::jsonb then
+    if pg_column_size(payload) > 16384 then
+      raise exception 'Provider payload exceeds 16 KiB limit';
+    end if;
+    if public.jsonb_has_sensitive_key(payload) then
+      raise exception 'Provider payload contains a prohibited credential-like field';
+    end if;
+  end if;
+  return new;
+end;
+$;
+revoke all on function public.guard_provider_payloads() from public, anon, authenticated;
+drop trigger if exists order_requests_provider_payload_guard on public.order_requests;
+create trigger order_requests_provider_payload_guard
+before insert or update on public.order_requests
+for each row execute function public.guard_provider_payloads();
+
+create index if not exists broker_positions_account_symbol_idx on public.broker_positions(broker_account_id, symbol);\n\ndrop trigger if exists broker_positions_provider_payload_guard on public.broker_positions;\ncreate trigger broker_positions_provider_payload_guard\nbefore insert or update on public.broker_positions\nfor each row execute function public.guard_provider_payloads();
 
 create table if not exists public.account_equity_snapshots (
   id bigint generated always as identity primary key,
