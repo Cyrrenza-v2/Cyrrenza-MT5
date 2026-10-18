@@ -161,9 +161,28 @@
       wrapped.__opsWrapped = true;
       window.cyrrenzaRefreshBackend = wrapped;
     }
-    if (window.cyrrenzaSupabase?.auth) {
-      window.cyrrenzaSupabase.auth.onAuthStateChange(() => setTimeout(()=>renderBackend(window.cyrrenzaBackendData||null),0));
+    const bindAuth = () => {
+      if (window.cyrrenzaSupabase?.auth) {
+        window.cyrrenzaSupabase.auth.onAuthStateChange((event) => {
+          setTimeout(()=>renderBackend(window.cyrrenzaBackendData||null), event === "SIGNED_IN" ? 900 : 0);
+        });
+        return true;
+      }
+      return false;
+    };
+    if (!bindAuth()) {
+      let attempts = 0;
+      const authWait = setInterval(() => {
+        attempts += 1;
+        if (bindAuth() || attempts >= 120) clearInterval(authWait);
+      }, 500);
     }
+    let dataAttempts = 0;
+    const dataWait = setInterval(() => {
+      dataAttempts += 1;
+      if (window.cyrrenzaBackendData) renderBackend(window.cyrrenzaBackendData);
+      if (dataAttempts >= 120) clearInterval(dataWait);
+    }, 500);
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
 })();
