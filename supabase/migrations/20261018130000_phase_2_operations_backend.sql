@@ -212,7 +212,12 @@ create trigger order_requests_provider_payload_guard
 before insert or update on public.order_requests
 for each row execute function public.guard_provider_payloads();
 
-create index if not exists broker_positions_account_symbol_idx on public.broker_positions(broker_account_id, symbol);\n\ndrop trigger if exists broker_positions_provider_payload_guard on public.broker_positions;\ncreate trigger broker_positions_provider_payload_guard\nbefore insert or update on public.broker_positions\nfor each row execute function public.guard_provider_payloads();
+create index if not exists broker_positions_account_symbol_idx on public.broker_positions(broker_account_id, symbol);
+
+drop trigger if exists broker_positions_provider_payload_guard on public.broker_positions;
+create trigger broker_positions_provider_payload_guard
+before insert or update on public.broker_positions
+for each row execute function public.guard_provider_payloads();
 
 create table if not exists public.account_equity_snapshots (
   id bigint generated always as identity primary key,
