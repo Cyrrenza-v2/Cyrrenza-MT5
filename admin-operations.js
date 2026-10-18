@@ -26,7 +26,7 @@
       button.dataset.page = page;
       button.innerHTML = '<span class="ni">'+glyph+'</span>'+label;
       nav.insertBefore(button, integrations || null);
-      button.addEventListener("click", () => window.cyrrenzaGo?.(page) || window.go?.(page));
+      button.addEventListener("click", () => { if (typeof window.go === "function") window.go(page); });
     });
 
     const footnote = document.querySelector(".footnote");
@@ -166,14 +166,4 @@
     }
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init,{once:true});else init();
-  // The base page's navigation function is global in this static app.
-  const waitForNav = () => {
-    if(typeof window.go === "function") {
-      window.cyrrenzaGo = window.go;
-      document.querySelectorAll('#nav button[data-page="approvals"],#nav button[data-page="accounts-positions"],#nav button[data-page="security-risk"]').forEach(b=>{
-        if(!b.dataset.opsBound){b.dataset.opsBound="true";b.addEventListener("click",()=>window.go(b.dataset.page));}
-      });
-    } else setTimeout(waitForNav,50);
-  };
-  waitForNav();
 })();
