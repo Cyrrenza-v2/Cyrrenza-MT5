@@ -39,4 +39,4 @@ jobs:
           grep -q 'id="page-accounts-positions"' admin-operations.js
           grep -q 'id="page-security-risk"' admin-operations.js
           grep -q 'disabled title="No secure server-side kill-switch endpoint is available"' admin-operations.js
-          grep -q 'broker demo adapter' docs/ADMIN_OPERATIONS_MODULES.md
+          grep -q 'broker-authorized demo access' docs/ADMIN_OPERATIONS_MODULES.md
