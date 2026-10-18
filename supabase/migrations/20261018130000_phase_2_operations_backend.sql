@@ -31,7 +31,7 @@ create table if not exists public.order_requests (
 );
 -- Derive client identity from the broker account and reject non-demo accounts.
 create or replace function public.enforce_demo_order_account()
-returns trigger language plpgsql set search_path = '' as $
+returns trigger language plpgsql set search_path = '' as $$
 declare
   account_client uuid;
   account_type text;
@@ -56,7 +56,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 revoke all on function public.enforce_demo_order_account() from public, anon, authenticated;
 drop trigger if exists order_requests_demo_account_guard on public.order_requests;
 create trigger order_requests_demo_account_guard
@@ -66,7 +66,7 @@ for each row execute function public.enforce_demo_order_account();
 -- Enforce a conservative order lifecycle; uncertain provider outcomes must be
 -- reconciled and must never cause an automatic duplicate submission.
 create or replace function public.enforce_order_status_transition()
-returns trigger language plpgsql set search_path = '' as $
+returns trigger language plpgsql set search_path = '' as $$
 begin
   if new.status = old.status then
     return new;
@@ -83,7 +83,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 revoke all on function public.enforce_order_status_transition() from public, anon, authenticated;
 drop trigger if exists order_requests_status_transition_guard on public.order_requests;
 create trigger order_requests_status_transition_guard
@@ -155,7 +155,7 @@ create table if not exists public.broker_positions (
 -- Recursively reject credential-like keys in provider payloads. Bound payloads to
 -- 16 KiB so raw provider responses cannot become an unbounded secret/log store.
 create or replace function public.jsonb_has_sensitive_key(p_value jsonb)
-returns boolean language plpgsql immutable set search_path = '' as $
+returns boolean language plpgsql immutable set search_path = '' as $$
 declare
   item record;
 begin
@@ -177,11 +177,11 @@ begin
   end if;
   return false;
 end;
-$;
+$$;
 revoke all on function public.jsonb_has_sensitive_key(jsonb) from public, anon, authenticated;
 
 create or replace function public.guard_provider_payloads()
-returns trigger language plpgsql set search_path = '' as $
+returns trigger language plpgsql set search_path = '' as $$
 declare
   payload jsonb;
 begin
@@ -205,7 +205,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 revoke all on function public.guard_provider_payloads() from public, anon, authenticated;
 drop trigger if exists order_requests_provider_payload_guard on public.order_requests;
 create trigger order_requests_provider_payload_guard
