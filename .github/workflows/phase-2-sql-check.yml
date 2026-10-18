@@ -1,0 +1,59 @@
+name: Phase 2 SQL checks
+
+on:
+  pull_request:
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/phase-2-sql-check.yml"
+  push:
+    branches:
+      - main
+      - feat/phase-2-operations-backend
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/tests/**"
+      - ".github/workflows/phase-2-sql-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sql-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PostgreSQL parser
+        run: python -m pip install --disable-pip-version-check pglast
+      - name: Parse migration and smoke-test SQL
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from pglast import parse_sql
+
+          paths = [
+              Path("supabase/migrations/20261018130000_phase_2_operations_backend.sql"),
+              Path("supabase/tests/phase-2-operations-smoke.sql"),
+          ]
+          for path in paths:
+              sql = path.read_text(encoding="utf-8")
+              parse_sql(sql)
+              print(f"PASS: PostgreSQL parser accepted {path}")
+          PY
+      - name: Assert fail-closed controls and RLS coverage
+        shell: bash
+        run: |
+          migration="supabase/migrations/20261018130000_phase_2_operations_backend.sql"
+          grep -q "new_orders_enabled, emergency_stop, environment" "$migration"
+          grep -q "values ('global', false, true, 'demo'" "$migration"
+          grep -q "prevent_order_self_approval" "$migration"
+          grep -q "enable row level security" "$migration"
+          grep -q "order_requests" "$migration"
+          grep -q "broker_positions" "$migration"
+          grep -q "reconciliation_events" "$migration"
+          echo "PASS: required Phase 2 safety markers are present"
