@@ -60,7 +60,7 @@ $$;
 revoke all on function public.enforce_demo_order_account() from public, anon, authenticated;
 drop trigger if exists order_requests_demo_account_guard on public.order_requests;
 create trigger order_requests_demo_account_guard
-before insert or update of broker_account_id, client_id, status on public.order_requests
+before insert or update on public.order_requests
 for each row execute function public.enforce_demo_order_account();
 
 -- Enforce a conservative order lifecycle; uncertain provider outcomes must be
