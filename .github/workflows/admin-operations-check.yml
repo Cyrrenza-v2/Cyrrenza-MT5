@@ -1,0 +1,42 @@
+name: Admin operations static checks
+
+on:
+  pull_request:
+    paths:
+      - "index.html"
+      - "admin-operations.js"
+      - ".github/workflows/admin-operations-check.yml"
+  push:
+    branches:
+      - main
+      - feat/admin-operations-modules
+    paths:
+      - "index.html"
+      - "admin-operations.js"
+      - ".github/workflows/admin-operations-check.yml"
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate JavaScript syntax
+        run: |
+          node --check admin-operations.js
+          node --check supabase-admin.js
+          node --check integration-monitoring.js
+          node --check deriv-market-flow.js
+      - name: Verify admin module wiring and safety locks
+        shell: bash
+        run: |
+          grep -q 'src="./admin-operations.js"' index.html
+          grep -q 'id="page-approvals"' admin-operations.js
+          grep -q 'id="page-accounts-positions"' admin-operations.js
+          grep -q 'id="page-security-risk"' admin-operations.js
+          grep -q 'disabled title="No secure server-side kill-switch endpoint is available"' admin-operations.js
+          grep -q 'broker demo adapter' docs/ADMIN_OPERATIONS_MODULES.md
