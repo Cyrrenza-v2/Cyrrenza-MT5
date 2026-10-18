@@ -1,10 +1,15 @@
 name: Admin operations static checks
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - "index.html"
       - "admin-operations.js"
+      - "integration-monitoring.js"
+      - "mt5-demo-data-monitor.js"
+      - "supabase/functions/mt5-demo-data/**"
+      - "docs/ADMIN_OPERATIONS_MODULES.md"
       - ".github/workflows/admin-operations-check.yml"
   push:
     branches:
@@ -13,11 +18,16 @@ on:
     paths:
       - "index.html"
       - "admin-operations.js"
+      - "integration-monitoring.js"
+      - "mt5-demo-data-monitor.js"
+      - "supabase/functions/mt5-demo-data/**"
+      - "docs/ADMIN_OPERATIONS_MODULES.md"
       - ".github/workflows/admin-operations-check.yml"
 
 jobs:
   static-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,18 +35,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
       - name: Validate JavaScript syntax
         run: |
           node --check admin-operations.js
           node --check supabase-admin.js
           node --check integration-monitoring.js
+          node --check mt5-demo-data-monitor.js
           node --check deriv-market-flow.js
+      - name: Validate MT5 Edge Function
+        run: deno check supabase/functions/mt5-demo-data/index.ts
       - name: Verify admin module wiring and safety locks
         shell: bash
         run: |
           grep -q 'src="./admin-operations.js"' index.html
+          grep -q 'src="./mt5-demo-data-monitor.js"' index.html
           grep -q 'id="page-approvals"' admin-operations.js
           grep -q 'id="page-accounts-positions"' admin-operations.js
           grep -q 'id="page-security-risk"' admin-operations.js
           grep -q 'disabled title="No secure server-side kill-switch endpoint is available"' admin-operations.js
           grep -q 'broker demo adapter' docs/ADMIN_OPERATIONS_MODULES.md
+          grep -q 'tradingEnabled: false' supabase/functions/mt5-demo-data/index.ts
+          grep -q 'redirect: "error"' supabase/functions/mt5-demo-data/index.ts
+          grep -q 'environment=demo' supabase/functions/mt5-demo-data/index.ts
