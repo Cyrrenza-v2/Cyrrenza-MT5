@@ -24,7 +24,7 @@ Consequently:
 
 ## Backend work required before operational use
 
-1. Confirm and document broker-authorized demo access and the supported MT5 integration protocol.
+1. Confirm and document broker-authorized demo access and the supported MT5 integration protocol, including a **broker demo adapter** health endpoint.
 2. Add server-side resources for approval requests, approval history, orders, positions, equity snapshots, reconciliation health, risk policy, kill-switch status and durable audit events.
 3. Add transactional state transitions and enforce that a requester cannot approve their own request.
 4. Enforce a demo-account allowlist, risk limits, quote freshness, idempotency and reconciliation on the server.
