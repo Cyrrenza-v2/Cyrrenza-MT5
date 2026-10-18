@@ -85,6 +85,8 @@
         <div class="panel" style="margin-top:15px"><div class="panelhead"><div><h2>Searchable audit events</h2><p>Server-side audit records only; local browser events are not security evidence.</p></div><input class="search" id="opsAuditSearch" placeholder="Search event, actor or reference…"></div><div class="tablewrap"><table><thead><tr><th>TIME</th><th>ACTOR</th><th>ACTION</th><th>ENTITY</th><th>DETAIL</th><th>ENVIRONMENT</th></tr></thead><tbody id="opsAuditRows"></tbody></table></div></div>
       </section>`;
     footnote?.insertAdjacentHTML("beforebegin", markup);
+    const initialRoute = (location.hash || "").replace(/^#/, "");
+    if (["approvals", "accounts-positions", "security-risk"].includes(initialRoute) && typeof window.go === "function") window.go(initialRoute, {updateUrl:false});
     document.getElementById("opsRefreshAccounts")?.addEventListener("click", () => {
       if (window.cyrrenzaRefreshBackend) window.cyrrenzaRefreshBackend();
       renderBackend(window.cyrrenzaBackendData || null);
