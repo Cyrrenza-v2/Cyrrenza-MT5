@@ -39,3 +39,36 @@ where schemaname='public'
     'account_equity_snapshots','reconciliation_events','risk_policies','trading_controls')
   and cmd in ('INSERT','UPDATE','DELETE')
 order by tablename, cmd;
+
+
+-- Phase 2 safety guards must exist before any provider adapter is enabled.
+with required_triggers(trigger_name, table_name) as (
+  values
+    ('order_requests_demo_account_guard','order_requests'),
+    ('order_requests_status_transition_guard','order_requests'),
+    ('order_requests_provider_payload_guard','order_requests'),
+    ('broker_positions_provider_payload_guard','broker_positions')
+)
+select r.trigger_name, r.table_name,
+       exists (
+         select 1 from information_schema.triggers t
+         where t.trigger_schema='public'
+           and t.event_object_schema='public'
+           and t.event_object_table=r.table_name
+           and t.trigger_name=r.trigger_name
+       ) as trigger_exists,
+       case when exists (
+         select 1 from information_schema.triggers t
+         where t.trigger_schema='public'
+           and t.event_object_schema='public'
+           and t.event_object_table=r.table_name
+           and t.trigger_name=r.trigger_name
+       ) then 'PASS' else 'FAIL' end as result
+from required_triggers r
+order by r.table_name, r.trigger_name;
+
+select
+  to_regprocedure('public.enforce_demo_order_account()') is not null as demo_account_guard_exists,
+  to_regprocedure('public.enforce_order_status_transition()') is not null as status_guard_exists,
+  to_regprocedure('public.jsonb_has_sensitive_key(jsonb)') is not null as credential_key_scanner_exists,
+  to_regprocedure('public.guard_provider_payloads()') is not null as payload_guard_exists;
