@@ -89,3 +89,19 @@ Record links or redacted evidence for provider authorization, successful health 
 ## Current status
 
 **Blocked on provider-issued authorized demo adapter details.** The repository can prepare and validate the contract, health checks, schema handling, and reconciliation tests, but it cannot honestly claim broker connectivity or test a real demo order until the external adapter and authorized demo account exist. Live trading remains disabled.
+
+
+## Implemented in Phase 3 branch
+
+- Added `supabase/functions/mt5-demo-data/index.ts`, a JWT-protected, read-only proxy for the allowlisted resources `account`, `symbols`, `positions`, `orders`, and `deals`.
+- Deployed the function to Supabase project `mvxhpddjtctpvrurqnpg` as `mt5-demo-data`, version 1, with JWT verification enabled.
+- Added `mt5-demo-data-monitor.js` and loaded it in the admin page. The Integrations page now has controls to request each resource, displays unavailable/stale/wrong-environment reasons, and never submits orders.
+- The proxy requires an active privileged admin profile, HTTPS adapter base URL, bearer token stored as server-side Edge Function secrets, explicit `environment: "demo"`, and withholds stale responses older than 120 seconds when a parseable provider timestamp is supplied.
+- Required additional secrets for this read-only data proxy: `MT5_ADAPTER_API_BASE_URL` and `MT5_ADAPTER_API_TOKEN`. Configure only after receiving the provider-issued endpoint and token through a secure channel.
+
+## Verification status after implementation
+
+- Supabase deployment response confirmed `mt5-demo-data` is active at version 1 with `verify_jwt: true`.
+- The function and UI changes are committed to the Phase 3 GitHub branch; the associated pull request must be reviewed before these UI/code changes become part of `main`.
+- The adapter secrets have not been configured and no provider-issued endpoint is available in this session. Therefore account/symbol/position/order/deal retrieval, data reconciliation, and demo order lifecycle tests remain blocked and must not be represented as successful.
+- The UI is a real read-only integration surface, not proof of broker connectivity. Live trading remains disabled.
