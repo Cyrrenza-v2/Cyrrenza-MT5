@@ -30,29 +30,36 @@
       say("Verifying Cyrrenza MT5 admin access…");
       try {
         const status=await request("status",session.access_token);
-        const [clientRes,accountRes,instrumentRes]=await Promise.all([request("clients",session.access_token),request("accounts",session.access_token),request("instruments",session.access_token)]);
-        const clients=clientRes.data||[],accounts=accountRes.data||[],instruments=instrumentRes.data||[];
-        window.cyrrenzaBackendData={clients,accounts,instruments,status};
+        const [clientRes,accountRes,instrumentRes,quoteRes]=await Promise.all([request("clients",session.access_token),request("accounts",session.access_token),request("instruments",session.access_token),request("quotes",session.access_token)]);
+        const clients=clientRes.data||[],accounts=accountRes.data||[],instruments=instrumentRes.data||[],quotes=quoteRes.data||[];
+        window.cyrrenzaBackendData={clients,accounts,instruments,quotes,status};
         const clientTable=document.getElementById("clientTable");
         if(clientTable) clientTable.innerHTML=clients.map(c=>{const a=accounts.find(x=>x.client_id===c.id)||{};return '<tr><td><b>'+safe(c.display_name)+'</b><div class="pair">'+safe(c.email||"")+'</div></td><td>'+safe(a.broker_login||"Not linked")+'</td><td>'+safe(c.country_code||"—")+'</td><td>'+safe(c.onboarding_status)+'</td><td>'+safe(a.lifecycle_status||"No account")+'</td><td><span class="tag">Backend</span></td></tr>'}).join("")||'<tr><td colspan="6" class="empty">No client records in Supabase.</td></tr>';
         const count=document.getElementById("clientCount");if(count)count.textContent=clients.length+" backend client(s)";
-        const renderInstrument=i=>'<tr><td><b>'+safe(i.symbol)+'</b><div class="pair">'+safe(i.display_name)+'</div></td><td>'+safe(i.asset_class)+'</td><td>—</td><td>—</td><td><span class="status pending">'+safe(i.source==="broker"?"Provider configured":"Not live")+'</span></td></tr>';
+        const renderInstrument=i=>{const q=quotes.find(x=>x.symbol===i.symbol);const fresh=q&&q.observed_at&&(Date.now()-new Date(q.observed_at).getTime()<=60000);const verified=!!(q&&q.is_live===true&&fresh&&Number.isFinite(Number(q.bid))&&Number.isFinite(Number(q.ask))&&Number(q.bid)>0&&Number(q.ask)>=Number(q.bid));return '<tr><td><b>'+safe(i.symbol)+'</b><div class="pair">'+safe(i.display_name)+'</div></td><td>'+safe(i.asset_class)+'</td><td>'+(q?safe(q.bid??"—")+' / '+safe(q.ask??"—"):'—')+'</td><td>—</td><td><span class="status '+(verified?'':'pending')+'">'+(verified?'Provider quote · verify source':(i.enabled?'No verified live quote':'Disabled · provider pending'))+'</span></td></tr>';};
         const marketTable=document.getElementById("marketTable");if(marketTable)marketTable.innerHTML=instruments.map(renderInstrument).join("")||'<tr><td colspan="5" class="empty">No instruments configured. Live quotes need a verified feed.</td></tr>';
         const mini=document.getElementById("miniMarkets");if(mini)mini.innerHTML=instruments.slice(0,5).map(i=>'<div class="market"><div><div class="symbol">'+safe(i.symbol)+'</div><div class="pair">'+safe(i.display_name)+'</div></div><div class="price">—</div><div class="change">Not live</div></div>').join("")||'<div class="empty">No verified live feed connected.</div>';
-        const marketNotice=document.querySelector("#page-markets .notice");if(marketNotice)marketNotice.textContent="Instrument catalogue loaded from Supabase. Quotes remain blank because no live market provider is configured.";
+        const marketNotice=document.querySelector("#page-markets .notice");if(marketNotice)marketNotice.textContent=quotes.length?"Instrument catalogue and stored provider quotes loaded from Supabase. Confirm provider health and quote freshness before treating any quote as live.":"Instrument catalogue loaded from Supabase. No stored quotes are available; prices are intentionally blank.";
         const clientSub=document.querySelector("#page-clients .sub");if(clientSub)clientSub.textContent="Client and account data loaded from the authenticated Cyrrenza MT5 backend.";
         const values=document.querySelectorAll("#page-overview .stat .value");if(values[0])values[0].textContent=accounts.length;if(values[3])values[3].textContent=clients.filter(c=>["pending","in_review"].includes(c.onboarding_status)).length;
         const overviewNotice=document.querySelector("#page-overview .notice");if(overviewNotice)overviewNotice.textContent="Connected to Cyrrenza MT5 Supabase. Market prices are not live until a verified broker/data feed is configured.";
-        const env=document.querySelector(".env");if(env)env.textContent="SUPABASE CONNECTED · TRADING OFF";
+        const env=document.querySelector(".env");if(env)env.textContent="BACKEND CONNECTED · TRADING OFF";
+        let signOut=document.getElementById("cySignOut");if(!signOut){signOut=document.createElement("button");signOut.id="cySignOut";signOut.className="btn";signOut.type="button";signOut.textContent="Sign out";document.querySelector(".topright")?.appendChild(signOut);signOut.addEventListener("click",async()=>{signOut.disabled=true;try{await sb.auth.signOut();gate.style.display="grid";say("You have signed out.");}finally{signOut.disabled=false;}});}
         const side=document.querySelector(".sidefoot");if(side)side.innerHTML='<span class="dot"></span><b style="font-size:11px">Supabase connected</b><small>Authenticated admin · trading disabled</small>';
         gate.style.display="none";
       } catch(e) {
-        await sb.auth.signOut();
-        gate.style.display="grid";
-        say(e.status===403?"This account is not an active Cyrrenza MT5 admin. Ask the project owner to authorize the profile.":(e.message||"Could not connect to the backend."));
+        if(e.status===401 || e.status===403) {
+          await sb.auth.signOut();
+          gate.style.display="grid";
+          say(e.status===403?"This account is not an active Cyrrenza MT5 admin. Ask the project owner to authorize the profile.":"Your session expired. Please sign in again.");
+        } else {
+          gate.style.display="grid";
+          say("Sign-in is retained, but the secured backend is temporarily unavailable. Refresh the page to retry. "+(e.message||""));
+        }
       }
     }
     form.addEventListener("submit",async e=>{e.preventDefault();submit.disabled=true;submit.textContent="Verifying…";say("");try{const {data,error}=await sb.auth.signInWithPassword({email:document.getElementById("cyAuthEmail").value.trim(),password:document.getElementById("cyAuthPassword").value});if(error)throw error;await connect(data.session)}catch(e){say(e.message||"Sign in failed.")}finally{submit.disabled=false;submit.textContent="Sign in securely"}});
+    window.cyrrenzaRefreshBackend=async()=>{const {data}=await sb.auth.getSession();if(data?.session)return connect(data.session);gate.style.display="grid";say("Sign in to refresh secured backend data.");};
     sb.auth.getSession().then(({data})=>data.session?connect(data.session):(gate.style.display="grid"));
     sb.auth.onAuthStateChange(event=>{if(event==="SIGNED_OUT")gate.style.display="grid"});
   }).catch(()=>say("Could not load secure sign-in library. Check internet and refresh."));
